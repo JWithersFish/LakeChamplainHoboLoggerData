@@ -1,0 +1,224 @@
+---
+title: "Lake Champlain FWCO Hobo logger Quality Control Report"
+author: "US Fish and Wildlife Service (contact: Jonah_Withers@fws.gov for issues)"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Execuative Summary
+
+This document is intended to provide some quality control on the data being downloaded from hobo loggers and meta data being entered into the Access database. 
+
+```{r Libraries and Data Load, echo = FALSE, include = FALSE}
+# Libraries ----
+library(dplyr)
+library(lubridate)
+library(data.table)
+library(RODBC)
+library(ggplot2)
+library(packrat)
+library(leaflet)
+library(kableExtra)
+
+
+
+
+
+# Import data ----
+# > Connect to access database ####
+
+# Identify channel to connect to database
+channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=./HoboLoggers/Databases/HoboLogger_MetaData.accdb")
+
+# Look at tables and queries within database
+sqlTables(channel)
+
+Deployments.0 <- as.data.table(sqlFetch(channel, "tbl Hobo Deployment")) # Import deployment table
+Sites.0 <- as.data.table(sqlFetch(channel, "LookupTbl_Sites")) # Import sites table
+
+# Close connection to database
+odbcClose(channel)
+
+
+# List all folders where downloads are stored
+df.folders <- list.dirs(path = "./HoboLoggers/Downloads")
+
+# Create shells to append data to
+df.RSdata <- NULL
+df.Alldata <- NULL
+
+for(i in 2:length(df.folders)){
+  
+  df.files <- list.files(path = df.folders[i],
+                         pattern = "*.csv")
+  
+  for(j in 1:length(df.files)){
+    
+    x <- fread(paste(df.folders[i], "/", df.files[j], sep = ""),
+               skip = 1,
+               stringsAsFactors = FALSE,
+               fill = TRUE)
+    
+    if(substr(names(x)[4],1,9) == "Intensity"){
+      
+      x1 <- x %>%
+        mutate(Logger_SN = substr(names(x)[3], start = 20, stop = 28),
+               LoggerType = "LightTemp",
+               FileName = df.files[j],
+               TimeZone = substr(names(x)[2], start = 12, stop = 100),
+               TempUnit = substr(names(x)[3], start = 8, stop = 9),
+               Stopped = NA)
+      
+      x2 <- cbind(x1[,1:4], x1 %>% 
+        dplyr::select(Logger_SN, LoggerType, FileName, TimeZone, TempUnit))
+      
+      colnames(x2) <- c("Rownumber", "TempTime", "Temp", "Light", "Logger_SN", "LoggerType", 'FileName', 'TimeZone', 'TempUnit')
+      
+      x3 <- x2 %>%
+        dplyr::select(Rownumber, TempTime, Temp, Logger_SN, LoggerType, FileName, TimeZone, TempUnit, Light)
+      
+      } else{
+        
+        x1 <- x %>%
+          mutate(Logger_SN = substr(names(x)[3], start = 20, stop = 28),
+                 LoggerType = "Temp",
+                 FileName = df.files[j],
+                 TimeZone = substr(names(x)[2], start = 12, stop = 100),
+                 TempUnit = substr(names(x)[3], start = 8, stop = 9),
+                 Light = NA)
+        
+      x2 <- cbind(x1[,1:3], x1 %>% 
+        dplyr::select(Logger_SN, LoggerType, FileName, TimeZone, TempUnit, Light))
+      
+      colnames(x2) <- c("Rownumber", "TempTime", "Temp", "Logger_SN", "LoggerType", 'FileName', 'TimeZone', 'TempUnit', "Light")
+      
+      x3 <- x2 %>%
+        dplyr::select(Rownumber, TempTime, Temp, Logger_SN, LoggerType, FileName, TimeZone, TempUnit, Light)
+      
+      }
+    
+    df.RSdata <- rbind(df.RSdata , x3)
+    
+    }
+  
+  df.Alldata <- rbind(df.Alldata , df.RSdata)
+
+}
+
+Output.0 <- df.Alldata %>% 
+  mutate(FileName = sub(".csv", "", FileName)) %>% 
+  left_join(Deployments.0 %>% 
+              dplyr::select(HoboID, SiteID), by = c("FileName" = "HoboID")) %>% 
+  left_join(Sites.0, by = "SiteID")
+
+write.csv(Output.0, 
+          file = "./HoboLoggers/AmalgamatedData.csv", 
+          row.names = FALSE)
+```
+
+## Timezone check
+```{r File Format Table, echo = FALSE, include = TRUE}
+# Were all downloads done with clock set to GMT+00:00? If not, list it here.
+TZ.check.0 <- df.Alldata %>%
+  filter(TimeZone != "GMT+00:00") %>%
+  dplyr::select(Logger_SN, FileName, TimeZone) %>% 
+  distinct(Logger_SN, FileName, TimeZone, .keep_all = TRUE) 
+
+if(nrow(TZ.check.0) == 0){
+  
+  print("There are 0 files downloaded with time zones other than GMT+00:00.")
+
+} else{
+  
+  print(paste("There are", length(unique(TZ.check0$FileName)), "files downloaded with time zones other than GMT+00:00."))
+
+  TZ.check.0 %>% 
+  kable(align = 'c',
+        caption = "Table 1. Files where loggers were downloaded in timezone other than GMT+00:00.") %>%
+   kable_classic(full_width = TRUE)
+  
+}
+```
+
+
+## Temperature unit check
+```{r Temperature Unit Table, echo = FALSE, include = TRUE}
+# Were all downloads done with clock set to GMT+00:00? If not, list it here.
+Temp.check.0 <- df.Alldata %>%
+  filter(TempUnit != "°C") %>% 
+  dplyr::select(Logger_SN, FileName, TempUnit) %>% 
+  distinct(Logger_SN, FileName, TempUnit, .keep_all = TRUE) 
+  
+
+if(nrow(Temp.check.0) == 0){
+  
+  print("There are 0 files downloaded with temperature units other than Celsius.")
+  
+} else{
+  
+  print(paste("There are", length(unique(Temp.check.0$FileName)), "files downloaded with temperature units other than Celsius."))
+
+  Temp.check.0 %>%
+    kable(align = 'c',
+          caption = "Table 2. Files where loggers were downloaded in temperature unit other than Celsius.") %>%
+    kable_classic(full_width = TRUE)
+  
+}
+```
+
+## Metadata check
+```{r Data Entry Table, echo = FALSE, include = TRUE, warning = FALSE}
+#Is there an entry in the Access database for every download?
+Deployments.1 <- data.frame(Database = Deployments.0 %>%
+                              mutate(HoboID = as.character(HoboID)) %>%
+                              filter(Downloaded == 1) %>%
+                              pull(HoboID) %>%
+                              unique())
+
+df.Alldata.FN <- data.frame(Downloads = df.Alldata %>%
+                              pull(FileName) %>% 
+                              unique()) %>% 
+                              mutate(Files = sub("\\.csv.*", "", Downloads)) %>% 
+  pull()
+                            
+
+Deployments.2 <- Deployments.1 %>% 
+  mutate(File = ifelse(Database %in% df.Alldata.FN, "Present", "Missing File"))
+
+if(Deployments.2$File %in% "Present"){
+  
+  print("All hobo logger listed in the database that have been marked as downloaded have files associated with them.")
+
+} else{
+  
+  Deployments.2 %>% 
+    filter(File == "Missing File") %>%
+    kable(align = 'c',
+        caption = "Table 3. Files listed as downloaded in the database but do not have files associated with them.") %>%
+    kable_classic(full_width = TRUE)
+}
+
+```
+
+## Site mapping
+```{r Site Leaflet, include = FALSE, echo = FALSE}
+map.0 <- leaflet(Sites.0) %>%
+   addProviderTiles("Esri.WorldImagery", group = "Satellite") %>%
+   addAwesomeMarkers(lng = ~ SiteLong,
+              lat = ~ SiteLat,
+              label = ~ SiteID) %>% 
+   addScaleBar(position = "topright") #%>%
+  # setView(-73.311854, 44.98751, zoom = 8)
+```
+
+```{r Site Map, echo = FALSE, include = TRUE}
+map.0
+```
