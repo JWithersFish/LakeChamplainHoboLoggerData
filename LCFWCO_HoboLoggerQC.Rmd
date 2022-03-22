@@ -36,7 +36,7 @@ library(kableExtra)
 # > Connect to access database ####
 
 # Identify channel to connect to database
-channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=./HoboLoggers/Databases/HoboLogger_MetaData.accdb")
+channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=./Databases/HoboLogger_MetaData.accdb")
 
 # Look at tables and queries within database
 sqlTables(channel)
@@ -49,7 +49,7 @@ odbcClose(channel)
 
 
 # List all folders where downloads are stored
-df.folders <- list.dirs(path = "./HoboLoggers/Downloads")
+df.folders <- list.dirs(path = "./Downloads")
 
 # Create shells to append data to
 df.RSdata <- NULL
@@ -120,7 +120,7 @@ Output.0 <- df.Alldata %>%
   left_join(Sites.0, by = "SiteID")
 
 write.csv(Output.0, 
-          file = "./HoboLoggers/AmalgamatedData.csv", 
+          file = "./AmalgamatedData.csv", 
           row.names = FALSE)
 ```
 
