@@ -24,7 +24,7 @@ YOI <- 2021
 # > Connect to access database ####
 
 # Identify channel to connect to database
-channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=./HoboLoggers/Databases/HoboLogger_MetaData.accdb")
+channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=./Databases/HoboLogger_MetaData.accdb")
 
 # Look at tables and queries within database
 sqlTables(channel)
@@ -38,14 +38,14 @@ odbcClose(channel)
 
 
 # > list hobo files ####
-df.files <- list.files(path = "./HoboLoggers/Downloads/BoquetRiver",
+df.files <- list.files(path = "./Downloads/BoquetRiver",
                        pattern = "*.csv")
 
 # Create shell and populate with downloads in GMT
 df.data <- NULL
 for(i in 1:length(df.files)){
   
-  x <- fread(paste("./HoboLoggers/Downloads/BoquetRiver/", df.files[i], sep = ""),
+  x <- fread(paste("./Downloads/BoquetRiver/", df.files[i], sep = ""),
              skip = 1,
              stringsAsFactors = FALSE,
              fill = TRUE,
@@ -94,7 +94,7 @@ myplot.0 <- df.1 %>%
 
 
 
-ggsave(filename = paste("./HoboLoggers/Figures/BoquetRiver_NorthBranch_Temperatures_",
+ggsave(filename = paste("./Figures/BoquetRiver_NorthBranch_Temperatures_",
                         YOI, 
                         ".png", 
                         sep = ""), 
@@ -134,7 +134,7 @@ myplot.1 <- df.1m %>%
 
 
 
-ggsave(filename = paste("./HoboLoggers/Figures/BoquetRiver_NorthBranch_GrowingDegreeDays_",
+ggsave(filename = paste("./Figures/BoquetRiver_NorthBranch_GrowingDegreeDays_",
                         YOI, 
                         ".png", 
                         sep = ""), 
